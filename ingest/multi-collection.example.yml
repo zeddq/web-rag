@@ -1,0 +1,120 @@
+# Multi-Collection RAG Configuration Example
+# This demonstrates the new multi-collection configuration format
+
+# Configuration version for migration handling
+version: "2.0"
+
+# Global defaults (can be overridden per collection)
+defaults:
+  chunk_chars: 1200
+  chunk_overlap: 200
+  embedding_provider: sentence-transformers
+  embedding_model: all-MiniLM-L6-v2
+  chroma_persist_dir: data/chroma
+  max_pages: 500
+  concurrency: 8
+
+# Collection definitions
+collections:
+  roo:
+    name: "Roo Documentation"
+    description: "AI-powered autonomous coding agent extension in Cursor"
+    domain: "ai-agent"
+    tags: ["ai-agent", "orchestration", "cursor", "extension"]
+    
+    sources:
+      base_urls:
+        - https://docs.roocode.com/
+      allow_patterns:
+        - ^https://docs\.roocode\.com/.*
+      deny_patterns:
+        - \.pdf$
+        - \.zip$
+        - \.(png|jpg|jpeg|gif|svg)$
+
+    max_pages: 1000
+    chunk_chars: 1500
+    chunk_overlap: 300
+
+    metadata:
+      language: en
+      version: "3.27.0"
+      priority: 1
+
+  jj_docs:
+    name: "JJ Documentation"
+    description: "Jujutsu VCS documentation and guides"
+    domain: "version-control"
+    tags: ["vcs", "jj", "jujutsu", "git-alternative"]
+    
+    # Collection-specific crawling configuration
+    sources:
+      base_urls:
+        - https://jj-vcs.github.io/jj/latest/
+      allow_patterns:
+        - ^https://jj-vcs\.github\.io/jj/latest/.*
+      deny_patterns:
+        - \.pdf$
+        - \.zip$
+        - \.(png|jpg|jpeg|gif|svg)$
+    
+    # Override defaults if needed
+    chunk_chars: 1500
+    chunk_overlap: 300
+    
+    # Collection metadata for selection
+    metadata:
+      language: en
+      last_updated: "2024-01-15"
+      version: "0.33.0"
+      priority: 2 # Higher priority in case of ambiguous queries
+
+  fastapi_docs:
+    name: "FastAPI Documentation"
+    description: "FastAPI web framework documentation"
+    domain: "web-framework"
+    tags: ["fastapi", "python", "web", "api", "async"]
+    
+    sources:
+      base_urls:
+        - https://fastapi.tiangolo.com/
+      allow_patterns:
+        - ^https://fastapi\.tiangolo\.com/.*
+      deny_patterns:
+        - \.pdf$
+        - \.zip$
+        - /img/
+        - \.(png|jpg|jpeg|gif|svg)$
+    
+    # Smaller chunks for API documentation
+    chunk_chars: 800
+    chunk_overlap: 150
+    max_pages: 300
+    
+    metadata:
+      language: en
+      version: "0.104.0"
+      priority: 3
+
+# Collection registry metadata (optional)
+registry:
+  auto_discover: false  # If true, scan for collection configs in subdirectories
+  collection_dir: ./collections  # Directory for individual collection configs
+
+# Usage Instructions:
+# 
+# 1. To ingest all collections:
+#    python -m rag_mcp.cli ingest-multi ingest/multi-collection.example.yml
+#
+# 2. To ingest specific collections:
+#    python -m rag_mcp.cli ingest-collection ingest/multi-collection.example.yml jj_docs
+#    python -m rag_mcp.cli ingest-collection ingest/multi-collection.example.yml python_docs
+#
+# 3. Each collection will be stored in its own Chroma collection named after the collection ID
+#
+# 4. The MCP server will automatically route queries to the most appropriate collection
+#    based on the collection's name, description, domain, and tags
+#
+# Note: This is an example configuration. Adjust URLs, patterns, and settings 
+# according to your specific needs. Some collections may require API keys 
+# (e.g., for OpenAI embeddings) or have rate limiting considerations.
