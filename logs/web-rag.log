@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/cezary/ragger/rag_mcp/server.py", line 32, in <module>
+    server = FastMCP(
+        "web-rag",
+        version="0.2.0",
+        description="MCP server providing semantic search over local Chroma collection",
+    )
+TypeError: FastMCP.__init__() got an unexpected keyword argument 'version'

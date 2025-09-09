@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "ragger"
+version = "0.2.0"
+description = "Web RAG MCP server (crawler + Chroma vector DB)"
+readme = "README.md"
+authors = ["cezary <cezary@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+mcp = ">=1.1.1"
+httpx = ">=0.27.2"
+trafilatura = ">=1.12.0"
+numpy = ">=2.1.0"
+PyYAML = ">=6.0.0"
+tqdm = ">=4.66.0"
+openai = ">=1.0.0"
+sentence-transformers = ">=2.7.0"
+chromadb = ">=0.5.0"
+
+[tool.poetry.scripts]
+web-rag-server = "rag_mcp.server:main"
+web-rag-cli = "rag_mcp.cli:main"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

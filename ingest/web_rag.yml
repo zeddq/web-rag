@@ -1,0 +1,33 @@
+base_urls:
+  - https://jj-vcs.github.io/jj/latest/
+
+# Allow only the JJ v0.32.0 docs subtree
+allow_patterns:
+  - ^https://jj-vcs\.github\.io/jj/latest/.*
+
+# Skip binary assets
+deny_patterns:
+  - \.pdf$
+  - \.zip$
+  - \.png$
+  - \.jpg$
+  - \.jpeg$
+  - \.gif$
+  - \.svg$
+
+# Crawl bounds
+max_pages: 500
+concurrency: 8
+chunk_chars: 1200
+chunk_overlap: 200
+
+# Chroma persistence
+chroma:
+  persist_dir: data/chroma
+  collection: web_rag
+
+# Embeddings
+# Use local sentence-transformers for now (first run downloads the model).
+# Alternatively: set provider to 'openai' and ensure OPENAI_API_KEY is set.
+embedding_provider: sentence-transformers
+embedding_model: all-MiniLM-L6-v2
