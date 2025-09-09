@@ -11,41 +11,45 @@ from pathlib import Path
 # Add the project root to the Python path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from rag_mcp.server import get_state, MultiCollectionState, LegacyWebRAGState
+from rag_mcp.server import get_state, MultiCollectionState
 from rag_mcp.config import MultiCollectionConfig, load_multi_config, ConfigurationError
 
 
-def test_legacy_fallback():
-    """Test that the server falls back to legacy mode when no multi-config is found."""
-    print("Testing legacy fallback...")
+def test_multi_collection_state_initialization():
+    """Test that server initializes with multi-collection configuration."""
+    print("Testing multi-collection state initialization...")
 
-    # Temporarily remove multi-config files
-    original_env = os.environ.get("MULTI_COLLECTION_CONFIG_PATH")
-    if original_env:
-        del os.environ["MULTI_COLLECTION_CONFIG_PATH"]
+    # Set multi-config path to our test config
+    original_config_path = os.environ.get("MULTI_COLLECTION_CONFIG_PATH")
+    os.environ["MULTI_COLLECTION_CONFIG_PATH"] = "ingest/multi-collection.example.yml"
 
     # Clear global state
     import rag_mcp.server as server_module
 
     server_module._state = None
-    server_module._legacy_state = None
+    if hasattr(server_module, "_legacy_state"):
+        server_module._legacy_state = None
 
     try:
-        # This should trigger legacy fallback since no multi-config exists
+        # This should load the multi-collection configuration
         state = get_state()
         assert isinstance(state, MultiCollectionState)
-        assert len(state.collections) == 1
-        print("✓ Legacy fallback works correctly")
+        assert len(state.collections) >= 1
+        print(
+            f"✓ Multi-collection state initialized with {len(state.collections)} collections"
+        )
 
-        # Test that we can call the new tools on legacy state
+        # Test that we can access the collections
         collections = list(state.collections.keys())
-        assert len(collections) == 1
-        print(f"✓ Legacy collection ID: {collections[0]}")
+        assert len(collections) >= 1
+        print(f"✓ Available collections: {collections}")
 
     finally:
-        # Restore environment
-        if original_env:
-            os.environ["MULTI_COLLECTION_CONFIG_PATH"] = original_env
+        # Clean up
+        if original_config_path:
+            os.environ["MULTI_COLLECTION_CONFIG_PATH"] = original_config_path
+        elif "MULTI_COLLECTION_CONFIG_PATH" in os.environ:
+            del os.environ["MULTI_COLLECTION_CONFIG_PATH"]
 
 
 def test_multi_collection_config():
@@ -196,40 +200,14 @@ def test_server_tools():
         raise
 
 
-def test_backwards_compatibility():
-    """Test that existing single-collection usage still works."""
-    print("\nTesting backwards compatibility...")
-
-    # Test with legacy web_rag.yml if it exists
-    legacy_config = "ingest/web_rag.yml"
-    if os.path.exists(legacy_config):
-        try:
-            config = load_multi_config(legacy_config)
-            assert isinstance(config, MultiCollectionConfig)
-            assert len(config.collections) == 1
-            print("✓ Legacy config converted to multi-collection format")
-
-            # Test that the collection has reasonable defaults
-            collection = next(iter(config.collections.values()))
-            assert collection.embedding_provider in ["sentence-transformers", "openai"]
-            assert collection.chunk_chars > 0
-            print("✓ Legacy collection has valid configuration")
-
-        except Exception as e:
-            print(f"⚠ Legacy config test failed: {e}")
-    else:
-        print("⚠ No legacy config found, skipping backwards compatibility test")
-
-
 def main():
     """Run all integration tests."""
     print("Running MCP server integration tests...\n")
 
     try:
-        test_legacy_fallback()
+        test_multi_collection_state_initialization()
         test_multi_collection_config()
         test_server_tools()
-        test_backwards_compatibility()
 
         print("\n✅ All integration tests passed!")
         return 0

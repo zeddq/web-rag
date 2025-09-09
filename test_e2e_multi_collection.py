@@ -228,50 +228,6 @@ class TestE2EMultiCollection:
         finally:
             os.unlink(config_path)
 
-    def test_backwards_compatibility_workflow(self):
-        """Test that legacy configurations work in the new system."""
-        print("\n=== Testing Backwards Compatibility Workflow ===")
-
-        # Create a legacy-style configuration
-        legacy_config = {
-            "base_urls": ["https://example.com/docs/"],
-            "chunk_chars": 1200,
-            "chunk_overlap": 200,
-            "max_pages": 100,
-            "chroma": {
-                "persist_dir": "data/test_chroma",
-                "collection": "test_collection",
-            },
-            "embedding_provider": "sentence-transformers",
-            "embedding_model": "all-MiniLM-L6-v2",
-        }
-
-        config_path = self.create_temp_config(legacy_config)
-
-        try:
-            # Test that legacy config is converted to multi-collection format
-            multi_config = load_multi_config(config_path)
-            assert isinstance(multi_config, MultiCollectionConfig)
-            assert len(multi_config.collections) == 1
-            print("✓ Legacy configuration converted to multi-collection format")
-
-            # Test that the converted config maintains original settings
-            collection = next(iter(multi_config.collections.values()))
-            assert collection.chunk_chars == 1200
-            assert collection.chunk_overlap == 200
-            assert collection.embedding_provider == "sentence-transformers"
-            print("✓ Legacy configuration settings preserved")
-
-            # Test that MCP tools work with converted legacy config
-            collections_result = list_collections(config_path=config_path)
-            assert len(collections_result["collections"]) == 1
-            print("✓ MCP tools work with converted legacy configuration")
-
-            print("✅ Backwards compatibility workflow test passed!")
-
-        finally:
-            os.unlink(config_path)
-
     def test_collection_selection_accuracy(self):
         """Test accuracy of collection selection for various query types."""
         print("\n=== Testing Collection Selection Accuracy ===")
@@ -536,7 +492,6 @@ def run_comprehensive_e2e_tests():
     tests = [
         test_suite.test_complete_workflow_multi_collection_setup,
         test_suite.test_mcp_tools_integration,
-        test_suite.test_backwards_compatibility_workflow,
         test_suite.test_collection_selection_accuracy,
         test_suite.test_performance_requirements,
         test_suite.test_error_handling_and_edge_cases,

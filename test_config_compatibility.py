@@ -14,48 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from rag_mcp.config import (
     load_config,
     load_multi_config,
-    detect_config_format,
     validate_collection_config,
     validate_multi_config,
     CollectionConfig,
     MultiCollectionConfig,
     ConfigurationError,
 )
-
-
-def test_legacy_config_loading():
-    """Test loading the existing legacy configuration."""
-    print("=== Testing Legacy Config Loading ===")
-
-    try:
-        # Test loading the existing web_rag.yml
-        config = load_config("ingest/web_rag.yml")
-
-        print(f"✓ Successfully loaded legacy config")
-        print(f"  Config type: {type(config).__name__}")
-
-        if isinstance(config, CollectionConfig):
-            print(f"  Collection ID: {config.id}")
-            print(f"  Collection name: {config.name}")
-            print(f"  Base URLs: {config.sources.base_urls}")
-            print(f"  Chunk chars: {config.chunk_chars}")
-            print(f"  Embedding model: {config.embedding_model}")
-
-            # Test validation
-            errors = validate_collection_config(config)
-            if errors:
-                print(f"  ⚠ Validation errors: {errors}")
-            else:
-                print(f"  ✓ Configuration is valid")
-
-        else:
-            print(f"  ⚠ Unexpected config type: {type(config)}")
-
-    except Exception as e:
-        print(f"✗ Failed to load legacy config: {e}")
-        return False
-
-    return True
 
 
 def test_multi_config_loading():
@@ -95,70 +59,26 @@ def test_multi_config_loading():
     return True
 
 
-def test_config_format_detection():
-    """Test automatic config format detection."""
-    print("\n=== Testing Config Format Detection ===")
-
-    test_cases = [
-        ("ingest/web_rag.yml", "legacy"),
-        ("ingest/multi-collection.example.yml", "multi-v2"),
-    ]
-
-    for config_path, expected_format in test_cases:
-        try:
-            with open(config_path, "r") as f:
-                data = yaml.safe_load(f)
-
-            detected_format = detect_config_format(data)
-
-            if detected_format == expected_format:
-                print(
-                    f"✓ {config_path}: detected '{detected_format}' (expected '{expected_format}')"
-                )
-            else:
-                print(
-                    f"✗ {config_path}: detected '{detected_format}' but expected '{expected_format}'"
-                )
-                return False
-
-        except Exception as e:
-            print(f"✗ Failed to test format detection for {config_path}: {e}")
-            return False
-
-    return True
-
-
-def test_legacy_to_multi_conversion():
-    """Test converting legacy config to multi-collection format."""
-    print("\n=== Testing Legacy to Multi-Collection Conversion ===")
+def test_multi_config_validation():
+    """Test validation of multi-collection configurations."""
+    print("\n=== Testing Multi-Collection Config Validation ===")
 
     try:
-        # Load legacy config as single collection
-        legacy_config = load_config("ingest/web_rag.yml")
-
-        if not isinstance(legacy_config, CollectionConfig):
-            print(f"✗ Expected CollectionConfig, got {type(legacy_config)}")
-            return False
-
-        # Convert to multi-collection format
-        multi_config = MultiCollectionConfig.from_single_collection(legacy_config)
-
-        print(f"✓ Successfully converted legacy config to multi-collection format")
-        print(f"  Collections: {list(multi_config.collections.keys())}")
-        print(f"  Collection name: {list(multi_config.collections.values())[0].name}")
+        # Test loading the new multi-collection example
+        config = load_multi_config("ingest/multi-collection.example.yml")
 
         # Test validation
-        errors = validate_multi_config(multi_config)
+        errors = validate_multi_config(config)
         if errors:
-            print(f"  ⚠ Validation errors after conversion: {errors}")
+            print(f"  ⚠ Validation errors: {errors}")
+            return False
         else:
-            print(f"  ✓ Converted configuration is valid")
+            print(f"  ✓ Multi-collection configuration is valid")
+            return True
 
     except Exception as e:
-        print(f"✗ Failed to convert legacy config: {e}")
+        print(f"✗ Failed to validate multi-collection config: {e}")
         return False
-
-    return True
 
 
 def test_error_handling():
@@ -246,10 +166,8 @@ def main():
     print("=" * 50)
 
     tests = [
-        test_legacy_config_loading,
         test_multi_config_loading,
-        test_config_format_detection,
-        test_legacy_to_multi_conversion,
+        test_multi_config_validation,
         test_error_handling,
     ]
 

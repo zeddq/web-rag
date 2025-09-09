@@ -1,6 +1,6 @@
 # Multi-Collection Configuration Examples
 
-This document provides comprehensive examples of configuration files for the multi-collection RAG system.
+This document provides comprehensive examples of configuration files for the multi-collection RAG system. All examples use the unified multi-collection format.
 
 ## 1. Main Registry Configuration
 
@@ -289,60 +289,19 @@ updates:
   notify_on_update: true
 ```
 
-## 2. Migration Configuration
-
-**File: `migration.yml` (For migrating from single to multi-collection)**
-
-```yaml
-# Migration configuration from single-collection to multi-collection
-migration:
-  source:
-    type: single-collection
-    config_path: ./ingest/web_rag.yml
-    chroma_persist_dir: data/chroma
-    collection_name: web_rag
-  
-  target:
-    type: multi-collection
-    config_path: ./collections.yml
-    strategy: split  # split, wrap, or duplicate
-  
-  # How to handle the migration
-  options:
-    # Split strategy: Analyze existing data and split into collections
-    split:
-      analyze_urls: true
-      create_collections_from_domains: true
-      min_documents_per_collection: 50
-    
-    # Wrap strategy: Keep as single collection in new format
-    wrap:
-      collection_id: legacy
-      collection_name: "Legacy Documentation"
-      preserve_metadata: true
-    
-    # Duplicate strategy: Keep old and create new
-    duplicate:
-      keep_original: true
-      new_prefix: "v2_"
-```
-
-## 3. Environment Configuration
+## 2. Environment Configuration
 
 **File: `.env` (Environment variables)**
 
 ```bash
+# Multi-Collection Configuration
+MULTI_COLLECTION_CONFIG_PATH=ingest/multi-collection.yml
+CHROMA_PERSIST_DIR=data/chroma
+
 # Embedding Configuration
 EMBEDDING_PROVIDER=sentence-transformers
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 OPENAI_API_KEY=sk-...
-
-# Storage Configuration
-CHROMA_PERSIST_DIR=data/chroma
-COLLECTIONS_CONFIG_PATH=./collections.yml
-
-# Default Collection (for backwards compatibility)
-DEFAULT_COLLECTION=python_docs
 
 # Cache Configuration
 REDIS_URL=redis://localhost:6379
@@ -357,7 +316,7 @@ MAX_CONCURRENT_COLLECTIONS=10
 LAZY_LOAD_COLLECTIONS=true
 ```
 
-## 4. Docker Compose Configuration
+## 3. Docker Compose Configuration
 
 **File: `docker-compose.yml`**
 
@@ -368,7 +327,7 @@ services:
   rag-mcp:
     build: .
     environment:
-      - COLLECTIONS_CONFIG_PATH=/app/config/collections.yml
+      - MULTI_COLLECTION_CONFIG_PATH=/app/config/multi-collection.yml
       - CHROMA_PERSIST_DIR=/app/data/chroma
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL}
@@ -402,7 +361,7 @@ volumes:
   redis_data:
 ```
 
-## 5. Collection Template
+## 4. Collection Template
 
 **File: `templates/collection_template.yml`**
 
@@ -467,7 +426,7 @@ metadata:
       - keyword4
 ```
 
-## 6. CLI Usage Examples
+## 5. CLI Usage Examples
 
 ```bash
 # Initialize multi-collection system
@@ -488,14 +447,11 @@ python -m rag_mcp.cli list
 # Test collection selection
 python -m rag_mcp.cli test-selection "How do I rebase in jj?"
 
-# Migrate from single to multi-collection
-python -m rag_mcp.cli migrate --config migration.yml
-
 # Start the MCP server
 python -m rag_mcp.server --config collections.yml
 ```
 
-## 7. MCP Client Configuration
+## 6. MCP Client Configuration
 
 **File: `.mcp.json`**
 
@@ -547,7 +503,6 @@ collections:
 
 registry:
   auto_discover: false
-  default_collection: test_collection
 ```
 
-These configuration examples demonstrate the flexibility and extensibility of the multi-collection system, supporting various deployment scenarios from simple single-file setups to complex distributed configurations with multiple collection sources.
+These configuration examples demonstrate the flexibility and extensibility of the multi-collection system, supporting various deployment scenarios from simple single-file setups to complex distributed configurations with multiple collection sources. The system is designed to efficiently manage and route queries across multiple specialized document collections.

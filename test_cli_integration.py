@@ -30,23 +30,6 @@ class TestCLIIntegration:
     @classmethod
     def setup_class(cls):
         """Set up test fixtures for CLI testing."""
-        # Legacy configuration for testing
-        cls.legacy_config = {
-            "base_urls": ["https://example.com/docs/"],
-            "allow_patterns": [r"^https://example\.com/docs/.*"],
-            "deny_patterns": [r"\.pdf$"],
-            "max_pages": 10,  # Small number for testing
-            "concurrency": 2,
-            "chunk_chars": 500,
-            "chunk_overlap": 100,
-            "chroma": {
-                "persist_dir": "data/test_chroma_cli",
-                "collection": "test_cli",
-            },
-            "embedding_provider": "sentence-transformers",
-            "embedding_model": "all-MiniLM-L6-v2",
-        }
-
         # Multi-collection configuration for testing
         cls.multi_config = {
             "version": "2.0",
@@ -131,48 +114,6 @@ class TestCLIIntegration:
         print("✓ CLI properly requires --config argument for ingest")
 
         print("✅ CLI help and basic functionality test passed!")
-
-    def test_cli_legacy_config_ingestion(self):
-        """Test CLI ingestion with legacy configuration."""
-        print("\n=== Testing CLI Legacy Config Ingestion ===")
-
-        config_path = self.create_temp_config(self.legacy_config)
-
-        try:
-            # Mock the actual crawling and embedding to avoid network calls
-            with patch("rag_mcp.ingest.crawl") as mock_crawl, patch(
-                "rag_mcp.ingest.ingest_into_chroma"
-            ) as mock_ingest:
-
-                # Mock crawl to return fake pages
-                mock_crawl.return_value = [
-                    ("https://example.com/docs/page1", "Page 1", "Test content 1"),
-                    ("https://example.com/docs/page2", "Page 2", "Test content 2"),
-                ]
-
-                # Run CLI ingest command
-                exit_code, stdout, stderr = self.run_cli_command(
-                    ["ingest", "--config", config_path]
-                )
-
-                # Should succeed
-                assert (
-                    exit_code == 0
-                ), f"CLI failed with exit code {exit_code}, stderr: {stderr}"
-                print("✓ CLI ingest command executed successfully with legacy config")
-
-                # Verify that crawl was called
-                assert mock_crawl.called, "Crawl function should have been called"
-                print("✓ Crawl function was called")
-
-                # Verify that ingest_into_chroma was called
-                assert mock_ingest.called, "Ingest function should have been called"
-                print("✓ Ingest function was called")
-
-        finally:
-            os.unlink(config_path)
-
-        print("✅ CLI legacy config ingestion test passed!")
 
     def test_cli_error_handling(self):
         """Test CLI error handling with invalid configurations."""
@@ -319,7 +260,7 @@ class TestCLIIntegration:
         """Test CLI integration with server components."""
         print("\n=== Testing CLI Server Integration ===")
 
-        config_path = self.create_temp_config(self.legacy_config)
+        config_path = self.create_temp_config(self.multi_config)
 
         try:
             # Test that CLI-ingested data is accessible by server components
@@ -380,7 +321,7 @@ class TestCLIIntegration:
         """Test CLI execution as subprocess (real-world usage)."""
         print("\n=== Testing CLI Subprocess Execution ===")
 
-        config_path = self.create_temp_config(self.legacy_config)
+        config_path = self.create_temp_config(self.multi_config)
 
         try:
             # Test running the CLI as a subprocess (like users would)
@@ -431,7 +372,7 @@ class TestCLIIntegration:
         """Test CLI output formatting and logging."""
         print("\n=== Testing CLI Output and Logging ===")
 
-        config_path = self.create_temp_config(self.legacy_config)
+        config_path = self.create_temp_config(self.multi_config)
 
         try:
             with patch("rag_mcp.ingest.crawl") as mock_crawl, patch(
@@ -542,7 +483,6 @@ def run_cli_integration_tests():
 
     tests = [
         test_suite.test_cli_help_and_basic_functionality,
-        test_suite.test_cli_legacy_config_ingestion,
         test_suite.test_cli_error_handling,
         test_suite.test_cli_with_multi_collection_config,
         test_suite.test_cli_environment_variable_support,

@@ -1,5 +1,7 @@
 # Multi-Collection RAG System - Architectural Diagrams
 
+> These diagrams illustrate the simplified multi-collection architecture focused exclusively on managing multiple specialized document collections.
+
 ## 1. System Overview
 
 ```mermaid
@@ -75,37 +77,40 @@ sequenceDiagram
     MCP_API-->>User: formatted_results
 ```
 
-## 3. Data Ingestion Pipeline
+## 3. Multi-Collection Ingestion Pipeline
 
 ```mermaid
 graph LR
     subgraph "Input"
-        URLs[Web URLs]
-        Config[Collection Config]
+        MC[Multi-Collection Config]
+        URLs[Collection URLs]
     end
     
-    subgraph "Processing"
+    subgraph "Processing Pipeline"
+        CS[Collection Selector]
         Crawler[Web Crawler]
         Extractor[Text Extractor]
         Chunker[Text Chunker]
         Embedder[Embedding Generator]
     end
     
-    subgraph "Storage"
-        Chroma[Chroma Collection]
-        Metadata[Metadata Store]
+    subgraph "Storage Layer"
+        C1[Collection 1]
+        C2[Collection 2]
+        CN[Collection N]
+        Meta[Collection Metadata]
     end
     
-    URLs --> Crawler
-    Config --> Crawler
+    MC --> CS
+    URLs --> CS
+    CS --> Crawler
     Crawler --> Extractor
     Extractor --> Chunker
     Chunker --> Embedder
-    Embedder --> Chroma
-    Embedder --> Metadata
-    
-    Config --> Chunker
-    Config --> Embedder
+    Embedder --> C1
+    Embedder --> C2
+    Embedder --> CN
+    CS --> Meta
 ```
 
 ## 4. Collection Registry Architecture
@@ -260,36 +265,39 @@ stateDiagram-v2
     }
 ```
 
-## 8. Deployment Architecture
+## 8. Multi-Collection Deployment Architecture
 
 ```mermaid
 graph TB
     subgraph "Development Environment"
         DevMCP[MCP Server Dev]
         DevChroma[Local Chroma]
-        DevConfig[Local Configs]
+        DevMC[Multi-Collection Config]
     end
     
     subgraph "Production Environment"
         ProdMCP[MCP Server Prod]
         ProdChroma[Chroma Cluster]
-        ProdConfig[Config Store]
-        ProdCache[Redis Cache]
+        ProdMC[Multi-Collection Store]
+        ProdCache[Collection Cache]
     end
     
     subgraph "Shared Services"
         Embeddings[Embedding Service]
-        Monitoring[Monitoring/Logging]
+        Monitoring[Collection Metrics]
+        Registry[Collection Registry]
     end
     
     DevMCP --> DevChroma
-    DevMCP --> DevConfig
+    DevMCP --> DevMC
     DevMCP --> Embeddings
+    DevMCP --> Registry
     
     ProdMCP --> ProdChroma
-    ProdMCP --> ProdConfig
+    ProdMCP --> ProdMC
     ProdMCP --> ProdCache
     ProdMCP --> Embeddings
+    ProdMCP --> Registry
     
     DevMCP --> Monitoring
     ProdMCP --> Monitoring
@@ -303,12 +311,9 @@ flowchart TD
     Validate -->|No| ReturnError1[Return 400 Error]
     Validate -->|Yes| SelectCol{Select Collection}
     
-    SelectCol -->|No Match| CheckDefault{Has Default?}
-    CheckDefault -->|No| ReturnNoCol[Return No Collection]
-    CheckDefault -->|Yes| UseDefault[Use Default Collection]
+    SelectCol -->|No Match| ReturnNoCol[Return No Collection Found]
     
     SelectCol -->|Match Found| LoadCol{Load Collection}
-    UseDefault --> LoadCol
     
     LoadCol -->|Failed| ReturnError2[Return 500 Error]
     LoadCol -->|Success| Search{Execute Search}

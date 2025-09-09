@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple, Union, Mapping, Any
+from typing import Dict, List, Optional, Set, Tuple, Mapping, Any
 
 import httpx
 import yaml
@@ -24,69 +24,6 @@ except Exception as e:  # pragma: no cover - optional import
     trafilatura = None
 
 
-@dataclass
-class IngestConfig:
-    """Legacy IngestConfig for backwards compatibility."""
-
-    base_urls: List[str]
-    allow_patterns: List[str]
-    deny_patterns: List[str]
-    max_pages: int = 500
-    concurrency: int = 8
-    chunk_chars: int = 1000
-    chunk_overlap: int = 200
-    # Chroma settings
-    chroma_persist_dir: str = "data/chroma"
-    chroma_collection: str = "web_rag"
-    # Embeddings
-    embedding_provider: str = "sentence-transformers"  # or "openai"
-    embedding_model: str = "all-MiniLM-L6-v2"
-
-    @classmethod
-    def from_collection_config(cls, config: CollectionConfig) -> "IngestConfig":
-        """Create IngestConfig from CollectionConfig for backwards compatibility."""
-        return cls(
-            base_urls=config.sources.base_urls,
-            allow_patterns=config.sources.allow_patterns,
-            deny_patterns=config.sources.deny_patterns,
-            max_pages=config.max_pages,
-            concurrency=config.concurrency,
-            chunk_chars=config.chunk_chars,
-            chunk_overlap=config.chunk_overlap,
-            chroma_persist_dir=config.chroma_persist_dir,
-            chroma_collection=config.chroma_collection or config.id,
-            embedding_provider=config.embedding_provider,
-            embedding_model=config.embedding_model,
-        )
-
-
-def load_legacy_config(path: str) -> IngestConfig:
-    """Load configuration in legacy format (deprecated).
-
-    This function is kept for backwards compatibility but should not be used
-    for new code. Use load_config() from config module instead.
-    """
-    with open(path, "r", encoding="utf-8") as f:
-        y = yaml.safe_load(f)
-    return IngestConfig(
-        base_urls=y.get("base_urls", []),
-        allow_patterns=y.get("allow_patterns", [".*"]),
-        deny_patterns=y.get("deny_patterns", []),
-        max_pages=y.get("max_pages", 500),
-        concurrency=y.get("concurrency", 8),
-        chunk_chars=y.get("chunk_chars", 1000),
-        chunk_overlap=y.get("chunk_overlap", 200),
-        chroma_persist_dir=y.get("chroma", {}).get(
-            "persist_dir", y.get("chroma_persist_dir", "data/chroma")
-        ),
-        chroma_collection=y.get("chroma", {}).get(
-            "collection", y.get("chroma_collection", "web_rag")
-        ),
-        embedding_provider=y.get("embedding_provider", "sentence-transformers"),
-        embedding_model=y.get("embedding_model", "all-MiniLM-L6-v2"),
-    )
-
-
 def _allowed(url: str, allow: List[str], deny: List[str]) -> bool:
     if any(re.search(p, url) for p in deny):
         return False
@@ -94,25 +31,18 @@ def _allowed(url: str, allow: List[str], deny: List[str]) -> bool:
 
 
 async def crawl(
-    config: Union[IngestConfig, CollectionConfig],
+    config: CollectionConfig,
 ) -> List[Tuple[str, str, str]]:
     """Fetch pages and return list of (url, title, text)."""
     if trafilatura is None:
         raise RuntimeError("trafilatura is required for crawling; please install it")
 
-    # Handle both config types
-    if isinstance(config, CollectionConfig):
-        base_urls = config.sources.base_urls
-        allow_patterns = config.sources.allow_patterns
-        deny_patterns = config.sources.deny_patterns
-        max_pages = config.max_pages
-        concurrency = config.concurrency
-    else:  # IngestConfig
-        base_urls = config.base_urls
-        allow_patterns = config.allow_patterns
-        deny_patterns = config.deny_patterns
-        max_pages = config.max_pages
-        concurrency = config.concurrency
+    # Extract config values
+    base_urls = config.sources.base_urls
+    allow_patterns = config.sources.allow_patterns
+    deny_patterns = config.sources.deny_patterns
+    max_pages = config.max_pages
+    concurrency = config.concurrency
 
     visited: Set[str] = set()
     to_visit: List[str] = list(dict.fromkeys(base_urls))
@@ -203,26 +133,17 @@ def _chunk(text: str, size: int, overlap: int) -> List[Tuple[int, str]]:
 
 
 def ingest_into_chroma(
-    pages: List[Tuple[str, str, str]], cfg: Union[IngestConfig, CollectionConfig]
+    pages: List[Tuple[str, str, str]], cfg: CollectionConfig
 ) -> None:
     """Ingest pages into Chroma database."""
-    # Handle both config types
-    if isinstance(cfg, CollectionConfig):
-        embedding_provider = cfg.embedding_provider
-        embedding_model = cfg.embedding_model
-        chroma_persist_dir = cfg.chroma_persist_dir
-        chroma_collection = cfg.chroma_collection or cfg.id
-        chunk_chars = cfg.chunk_chars
-        chunk_overlap = cfg.chunk_overlap
-        collection_id = cfg.id
-    else:  # IngestConfig
-        embedding_provider = cfg.embedding_provider
-        embedding_model = cfg.embedding_model
-        chroma_persist_dir = cfg.chroma_persist_dir
-        chroma_collection = cfg.chroma_collection
-        chunk_chars = cfg.chunk_chars
-        chunk_overlap = cfg.chunk_overlap
-        collection_id = chroma_collection
+    # Extract config values
+    embedding_provider = cfg.embedding_provider
+    embedding_model = cfg.embedding_model
+    chroma_persist_dir = cfg.chroma_persist_dir
+    chroma_collection = cfg.chroma_collection or cfg.id
+    chunk_chars = cfg.chunk_chars
+    chunk_overlap = cfg.chunk_overlap
+    collection_id = cfg.id
 
     emb_fn = build_embedding_function(embedding_provider, embedding_model)
     client = get_client(chroma_persist_dir)
@@ -258,31 +179,31 @@ def ingest_into_chroma(
         )
 
 
-def ingest_from_config(config_path: str) -> None:
-    """Ingest from configuration file (supports both legacy and new formats).
+def ingest_from_config(config_path: str, collection_id: str) -> None:
+    """Ingest a specific collection from multi-collection configuration file.
 
     Args:
         config_path: Path to configuration file
+        collection_id: ID of the collection to ingest
 
     Raises:
-        ConfigurationError: If configuration is invalid
+        ConfigurationError: If configuration is invalid or collection not found
     """
     try:
         config = load_config(config_path)
 
-        if isinstance(config, CollectionConfig):
-            # Single collection
-            print(f"Ingesting collection: {config.name}")
-            pages = asyncio.run(crawl(config))
-            ingest_into_chroma(pages, config)
-            print(
-                f"Successfully ingested {len(pages)} pages into collection '{config.id}'"
+        if collection_id not in config.collections:
+            raise ConfigurationError(
+                f"Collection '{collection_id}' not found in configuration"
             )
 
-        else:  # MultiCollectionConfig - this shouldn't happen with load_config
-            raise ConfigurationError(
-                "Multi-collection config detected but single collection expected"
-            )
+        collection_config = config.collections[collection_id]
+        print(f"Ingesting collection: {collection_config.name} (ID: {collection_id})")
+        pages = asyncio.run(crawl(collection_config))
+        ingest_into_chroma(pages, collection_config)
+        print(
+            f"Successfully ingested {len(pages)} pages into collection '{collection_id}'"
+        )
 
     except ConfigurationError as e:
         print(f"Configuration error: {e}")
@@ -361,15 +282,3 @@ def ingest_collection_by_id(config_path: str, collection_id: str) -> None:
         ConfigurationError: If configuration is invalid or collection not found
     """
     ingest_from_multi_config(config_path, [collection_id])
-
-
-# Legacy function for backwards compatibility
-def ingest_from_legacy_config(config_path: str) -> None:
-    """Ingest from legacy configuration format (deprecated).
-
-    This function is kept for backwards compatibility but should not be used
-    for new code. Use ingest_from_config() instead.
-    """
-    cfg = load_legacy_config(config_path)
-    pages = asyncio.run(crawl(cfg))
-    ingest_into_chroma(pages, cfg)

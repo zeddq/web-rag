@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -160,13 +160,6 @@ class CollectionConfig:
             metadata=metadata,
         )
 
-    @classmethod
-    def from_legacy_dict(
-        cls, data: Dict[str, Any], collection_id: str = "web_rag"
-    ) -> CollectionConfig:
-        """Create collection config from legacy format."""
-        return cls.from_dict(collection_id, data)
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -291,25 +284,6 @@ class MultiCollectionConfig:
             registry=registry,
         )
 
-    @classmethod
-    def from_single_collection(
-        cls, collection_config: CollectionConfig
-    ) -> MultiCollectionConfig:
-        """Create multi-collection config from a single collection."""
-        return cls(
-            version="2.0",
-            defaults=GlobalDefaults(
-                chunk_chars=collection_config.chunk_chars,
-                chunk_overlap=collection_config.chunk_overlap,
-                embedding_provider=collection_config.embedding_provider,
-                embedding_model=collection_config.embedding_model,
-                chroma_persist_dir=collection_config.chroma_persist_dir,
-                max_pages=collection_config.max_pages,
-                concurrency=collection_config.concurrency,
-            ),
-            collections={collection_config.id: collection_config},
-        )
-
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         result = {
@@ -340,29 +314,14 @@ class ConfigurationError(Exception):
     pass
 
 
-def detect_config_format(data: Dict[str, Any]) -> str:
-    """Detect configuration format type.
-
-    Returns:
-        - "multi-v2": New multi-collection format
-        - "legacy": Legacy single-collection format
-    """
-    if "version" in data and data["version"] >= "2.0":
-        return "multi-v2"
-    elif "collections" in data:
-        return "multi-v2"
-    else:
-        return "legacy"
-
-
-def load_config(config_path: str) -> Union[MultiCollectionConfig, CollectionConfig]:
-    """Load configuration from file with automatic format detection.
+def load_config(config_path: str) -> MultiCollectionConfig:
+    """Load multi-collection configuration from file.
 
     Args:
         config_path: Path to configuration file
 
     Returns:
-        Either a MultiCollectionConfig (new format) or CollectionConfig (legacy)
+        MultiCollectionConfig instance
 
     Raises:
         ConfigurationError: If configuration is invalid or file not found
@@ -379,14 +338,7 @@ def load_config(config_path: str) -> Union[MultiCollectionConfig, CollectionConf
                 f"Configuration file must contain a dictionary, got {type(data)}"
             )
 
-        config_format = detect_config_format(data)
-
-        if config_format == "multi-v2":
-            return MultiCollectionConfig.from_dict(data)
-        else:  # legacy
-            # Convert legacy config to single collection
-            collection_config = CollectionConfig.from_legacy_dict(data)
-            return collection_config
+        return MultiCollectionConfig.from_dict(data)
 
     except yaml.YAMLError as e:
         raise ConfigurationError(f"Failed to parse YAML configuration: {e}")
@@ -395,7 +347,10 @@ def load_config(config_path: str) -> Union[MultiCollectionConfig, CollectionConf
 
 
 def load_multi_config(config_path: str) -> MultiCollectionConfig:
-    """Load configuration and ensure it's returned as MultiCollectionConfig.
+    """Load multi-collection configuration from file.
+
+    This function is now identical to load_config() since we only support
+    multi-collection format. Kept for backwards compatibility.
 
     Args:
         config_path: Path to configuration file
@@ -406,13 +361,7 @@ def load_multi_config(config_path: str) -> MultiCollectionConfig:
     Raises:
         ConfigurationError: If configuration is invalid or file not found
     """
-    config = load_config(config_path)
-
-    if isinstance(config, CollectionConfig):
-        # Convert single collection to multi-collection format
-        return MultiCollectionConfig.from_single_collection(config)
-    else:
-        return config
+    return load_config(config_path)
 
 
 def validate_collection_config(config: CollectionConfig) -> List[str]:

@@ -12,27 +12,13 @@ from .collection_selector import CollectionSelector, create_selector
 from .config import (
     CollectionConfig,
     MultiCollectionConfig,
-    load_config,
     load_multi_config,
     ConfigurationError,
 )
 
 logger = logging.getLogger(__name__)
 
-# Environment variables for backwards compatibility and config path
-PERSIST_DIR = os.environ.get(
-    "CHROMA_PERSIST_DIR", os.environ.get("WEB_RAG_INDEX_DIR", "data/chroma")
-)
-COLLECTION = os.environ.get("CHROMA_COLLECTION", "web_rag")
-PROVIDER = os.environ.get(
-    "WEB_RAG_QUERY_PROVIDER",
-    os.environ.get("EMBEDDING_PROVIDER", "sentence-transformers"),
-)
-MODEL = os.environ.get(
-    "WEB_RAG_QUERY_MODEL", os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-)
-
-# Multi-collection config path (with precedence order)
+# Multi-collection config path
 MULTI_CONFIG_PATH = os.environ.get(
     "MULTI_COLLECTION_CONFIG_PATH", "ingest/multi-collection.yml"
 )
@@ -232,58 +218,22 @@ class MultiCollectionState:
         return None
 
 
-class LegacyWebRAGState:
-    """Backwards-compatible single collection state."""
-
-    def __init__(self):
-        self.client = get_client(PERSIST_DIR)
-        self.emb_fn = build_embedding_function(PROVIDER, MODEL)
-        self.col = get_or_create_collection(self.client, COLLECTION, self.emb_fn)
-
-        # Create a single collection config for compatibility
-        self.collection_config = CollectionConfig(
-            id=COLLECTION,
-            name=COLLECTION.replace("_", " ").title(),
-            description=f"Legacy collection: {COLLECTION}",
-            chroma_persist_dir=PERSIST_DIR,
-            chroma_collection=COLLECTION,
-            embedding_provider=PROVIDER,
-            embedding_model=MODEL,
-        )
-
-        # Create multi-collection config with single collection
-        multi_config = MultiCollectionConfig.from_single_collection(
-            self.collection_config
-        )
-        self.multi_state = MultiCollectionState(multi_config)
-
-    def has_data(self) -> bool:
-        """Check if collection has data."""
-        try:
-            r = self.col.peek(limit=1)
-            return len(r.get("ids", [])) > 0
-        except Exception:
-            return False
-
-
 # Initialize FastMCP server
 server = FastMCP(
     "web-rag",
     instructions=(
         "MCP server providing semantic search over local Chroma collections. "
-        "Supports both single and multi-collection configurations. "
         "Use collection tools to explore and search across different document collections."
     ),
 )
 
 # Global state
 _state: Optional[MultiCollectionState] = None
-_legacy_state: Optional[LegacyWebRAGState] = None
 
 
 def get_state() -> MultiCollectionState:
     """Get multi-collection state, initializing if needed."""
-    global _state, _legacy_state
+    global _state
 
     if _state is not None:
         return _state
@@ -306,12 +256,12 @@ def get_state() -> MultiCollectionState:
                 logger.warning(f"Failed to load config from {config_path}: {e}")
                 continue
 
-    # Fall back to legacy single-collection mode
-    logger.info("No multi-collection config found, using legacy single-collection mode")
-    _legacy_state = LegacyWebRAGState()
-    _state = _legacy_state.multi_state
-
-    return _state
+    # No valid configuration found
+    raise ConfigurationError(
+        f"No valid multi-collection configuration found. "
+        f"Tried paths: {config_paths}. "
+        f"Please ensure a valid multi-collection configuration exists at one of these locations."
+    )
 
 
 # MCP Resources

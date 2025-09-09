@@ -1,20 +1,22 @@
 # Multi-Collection RAG System Architecture
 
+> This system is designed exclusively for multi-collection operation. All configurations and operations are built around managing multiple document collections.
+
 ## Executive Summary
 
-This document outlines the architectural design for extending the current single-collection RAG system to support multiple collections, each targeting different domains or documentation sources. The design emphasizes backwards compatibility, scalability, and efficient collection selection.
+This document outlines the architectural design for the multi-collection RAG system, supporting multiple collections that each target different domains or documentation sources. The design emphasizes scalability and efficient collection selection.
 
 ## 1. Configuration Schema Design
 
 ### 1.1 Multi-Collection Configuration Format
 
-The new configuration will support both single-collection (backwards compatible) and multi-collection setups.
+The system uses a unified multi-collection configuration format.
 
 #### Option A: Single Configuration File (`collections.yml`)
 
 ```yaml
 # Multi-collection configuration
-version: "2.0"  # Configuration version for migration handling
+version: "2.0"  # Configuration version
 
 # Global defaults (can be overridden per collection)
 defaults:
@@ -151,24 +153,6 @@ metadata:
   priority: 1
 ```
 
-### 1.2 Backwards Compatibility
-
-The system will detect configuration version and handle legacy configs:
-
-```python
-def load_collection_config(path: str) -> CollectionConfig | LegacyConfig:
-    with open(path) as f:
-        data = yaml.safe_load(f)
-    
-    # Check for version or new structure
-    if "version" in data and data["version"] >= "2.0":
-        return MultiCollectionConfig.from_dict(data)
-    elif "collections" in data:
-        return MultiCollectionConfig.from_dict(data)
-    else:
-        # Legacy single collection
-        return LegacyConfig.from_dict(data)
-```
 
 ## 2. Collection Selection Algorithm
 
@@ -508,34 +492,22 @@ def get_collection_info(collection_id: str) -> Dict[str, Any]:
     }
 ```
 
-### 3.2 Modified Existing Tools
+### 3.2 Enhanced Existing Tools
 
-The current `search` tool becomes a wrapper with backwards compatibility:
+The `search` tool automatically selects the best collection:
 
 ```python
 @server.tool()
 def search(query: str, k: int = 5) -> Dict[str, Any]:
     """
-    Search across collections (backwards compatible).
-    Auto-selects the best collection or uses default if configured.
+    Search across collections with automatic collection selection.
     """
-    # Check for default collection (backwards compatibility)
-    default_collection = os.environ.get("DEFAULT_COLLECTION")
-    
-    if default_collection:
-        return search_collection(
-            query=query,
-            collection_id=default_collection,
-            k=k,
-            auto_select=False
-        )
-    else:
-        return search_collection(
-            query=query,
-            collection_id=None,
-            k=k,
-            auto_select=True
-        )
+    return search_collection(
+        query=query,
+        collection_id=None,
+        k=k,
+        auto_select=True
+    )
 ```
 
 ## 4. System Architecture Components
@@ -622,7 +594,7 @@ class CollectionRegistry:
 ```python
 class Collection:
     """
-    Represents a single collection with its Chroma backend.
+    Represents an individual collection with its Chroma backend.
     """
     def __init__(self, metadata: CollectionMetadata):
         self.metadata = metadata
@@ -659,13 +631,14 @@ class Collection:
 
 ### 4.3 State Management
 
-Replace single global state with registry-based approach:
+Multi-collection state management:
 
 ```python
 # server.py
 class MultiCollectionState:
     def __init__(self):
-        self.registry = CollectionRegistry(config_path=CONFIG_PATH)
+        config_path = os.environ.get("MULTI_COLLECTION_CONFIG_PATH", "ingest/multi-collection.yml")
+        self.registry = CollectionRegistry(config_path=config_path)
         self.selector = CollectionSelector(self.registry)
     
     def get_collection(self, collection_id: str) -> Optional[Collection]:
@@ -690,17 +663,36 @@ def get_collection_selector() -> CollectionSelector:
     return get_state().selector
 ```
 
-## 5. Implementation Strategy
+## 5. Environment Variables
+
+The system uses the following environment variables for configuration:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MULTI_COLLECTION_CONFIG_PATH` | `ingest/multi-collection.yml` | Path to the multi-collection configuration file |
+| `CHROMA_PERSIST_DIR` | `data/chroma` | Base directory for Chroma collections |
+| `OPENAI_API_KEY` | - | Required for OpenAI embedding providers |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `MAX_CONCURRENT_COLLECTIONS` | `10` | Maximum number of collections to load simultaneously |
+
+Example usage:
+```bash
+export MULTI_COLLECTION_CONFIG_PATH="./config/collections.yml"
+export CHROMA_PERSIST_DIR="./data/vector_store"
+python -m rag_mcp.server
+```
+
+## 6. Implementation Strategy
 
 ### Phase 1: Foundation (Week 1)
-1. Create new configuration schema classes
-2. Implement configuration loader with version detection
+1. Create configuration schema classes
+2. Implement configuration loader
 3. Build CollectionMetadata and CollectionRegistry classes
-4. Add backwards compatibility layer
+4. Set up multi-collection state management
 
 ### Phase 2: Collection Management (Week 2)
 1. Implement Collection class with lazy loading
-2. Create MultiCollectionState to replace WebRAGState
+2. Create MultiCollectionState architecture
 3. Update chroma_store.py to support multiple collections
 4. Implement collection discovery mechanism
 
@@ -712,7 +704,7 @@ def get_collection_selector() -> CollectionSelector:
 
 ### Phase 4: MCP API Enhancement (Week 4)
 1. Add new MCP tools (select_collection, list_collections, etc.)
-2. Modify existing search tool for backwards compatibility
+2. Enhance existing search tool with auto-selection
 3. Add collection-specific resource URIs
 4. Implement collection info endpoints
 
@@ -724,50 +716,9 @@ def get_collection_selector() -> CollectionSelector:
 
 ### Phase 6: Testing & Documentation (Week 6)
 1. Create comprehensive test suite
-2. Write migration guide for existing users
-3. Update documentation with examples
-4. Performance testing and optimization
-
-## 6. Migration Path
-
-### For Existing Users
-
-1. **Automatic Migration**: System detects old config format and wraps it as a single collection
-2. **Manual Migration**: Provide migration script to convert old configs to new format
-3. **Environment Variable Compatibility**: Continue supporting old env vars as defaults
-
-```python
-# Migration script example
-def migrate_config(old_config_path: str, new_config_path: str):
-    old_config = load_legacy_config(old_config_path)
-    
-    new_config = {
-        "version": "2.0",
-        "defaults": {
-            "chunk_chars": old_config.chunk_chars,
-            "chunk_overlap": old_config.chunk_overlap,
-            "embedding_provider": old_config.embedding_provider,
-            "embedding_model": old_config.embedding_model,
-        },
-        "collections": {
-            "default": {
-                "name": "Default Collection",
-                "description": "Migrated from legacy configuration",
-                "sources": {
-                    "base_urls": old_config.base_urls,
-                    "allow_patterns": old_config.allow_patterns,
-                    "deny_patterns": old_config.deny_patterns,
-                },
-                "metadata": {
-                    "migrated_at": datetime.now().isoformat()
-                }
-            }
-        }
-    }
-    
-    with open(new_config_path, 'w') as f:
-        yaml.dump(new_config, f)
-```
+2. Update documentation with examples
+3. Performance testing and optimization
+4. User guide creation
 
 ## 7. Performance Considerations
 
@@ -804,7 +755,7 @@ def migrate_config(old_config_path: str, new_config_path: str):
 
 ## Conclusion
 
-This architecture provides a scalable, backwards-compatible solution for multi-collection RAG support. The design emphasizes:
+This architecture provides a scalable solution for multi-collection RAG support. The design emphasizes:
 - Clear separation of concerns
 - Lazy loading for performance
 - Flexible configuration options
