@@ -217,7 +217,9 @@ class TestE2EMultiCollection:
             print("✓ get_collection_info returned complete collection information")
 
             # Test search tool (should not error even with no data)
-            search_result = search("test query", k=3, config_path=config_path)
+            # Note: search() doesn't accept config_path parameter
+            # It uses the current state from get_state()
+            search_result = search("test query", k=3)
             assert "results" in search_result or "error" in search_result
             if "results" in search_result:
                 assert isinstance(search_result["results"], list)

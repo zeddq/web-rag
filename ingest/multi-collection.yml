@@ -69,6 +69,62 @@ collections:
       version: "0.33.0"
       priority: 2 # Higher priority in case of ambiguous queries
 
+  warp:
+    name: "Warp Documentation"
+    description: "Warp documentation and guides"
+    domain: "terminal"
+    tags: ["terminal", "warp", "cli", "shell", "ai", "agent"]
+    
+    # Collection-specific crawling configuration
+    sources:
+      base_urls:
+        - https://docs.warp.dev/
+      allow_patterns:
+        - ^https://docs\.warp\.dev/.*
+      deny_patterns:
+        - \.pdf$
+        - \.zip$
+        - \.(png|jpg|jpeg|gif|svg)$
+    
+    # Override defaults if needed
+    chunk_chars: 1500
+    chunk_overlap: 300
+    
+    # Collection metadata for selection
+    metadata:
+      language: en
+      last_updated: "2024-01-15"
+      version: "0.33.0"
+      priority: 3 # Higher priority in case of ambiguous queries
+
+  itern2:
+    name: "Itern2 Documentation"
+    description: "Itern2 documentation and guides"
+    domain: "terminal"
+    tags: ["terminal", "itern2", "cli", "shell", "ai"]
+    
+    # Collection-specific crawling configuration
+    sources:
+      base_urls:
+        - https://iterm2.com/
+      allow_patterns:
+        - ^https://iterm2\.com/.*
+      deny_patterns:
+        - \.pdf$
+        - \.zip$
+        - \.(png|jpg|jpeg|gif|svg)$
+    
+    # Override defaults if needed
+    chunk_chars: 1000
+    chunk_overlap: 300
+    
+    # Collection metadata for selection
+    metadata:
+      language: en
+      last_updated: "2024-01-15"
+      version: "0.33.0"
+      priority: 3 # Higher priority in case of ambiguous queries
+
   fastapi_docs:
     name: "FastAPI Documentation"
     description: "FastAPI web framework documentation"
@@ -94,7 +150,7 @@ collections:
     metadata:
       language: en
       version: "0.104.0"
-      priority: 3
+      priority: 4
 
 # Collection registry metadata (optional)
 registry:

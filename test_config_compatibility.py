@@ -26,35 +26,48 @@ def test_multi_config_loading():
     """Test loading the new multi-collection configuration."""
     print("\n=== Testing Multi-Collection Config Loading ===")
 
-    try:
-        # Test loading the new multi-collection example
-        config = load_multi_config("ingest/multi-collection.example.yml")
+    # Test loading the new multi-collection example
+    config = load_multi_config("ingest/multi-collection.example.yml")
 
-        print(f"✓ Successfully loaded multi-collection config")
-        print(f"  Config type: {type(config).__name__}")
-        print(f"  Version: {config.version}")
-        print(f"  Collections: {list(config.collections.keys())}")
+    print(f"✓ Successfully loaded multi-collection config")
+    print(f"  Config type: {type(config).__name__}")
+    print(f"  Version: {config.version}")
+    print(f"  Collections: {list(config.collections.keys())}")
 
-        # Test individual collections
-        for coll_id, collection in config.collections.items():
-            print(f"  Collection '{coll_id}':")
-            print(f"    Name: {collection.name}")
-            print(f"    Domain: {collection.domain}")
-            print(f"    Tags: {collection.tags}")
-            print(
-                f"    Base URLs: {collection.sources.base_urls[:2]}..."
-            )  # First 2 URLs
+    # Assert basic properties
+    assert config is not None, "Config should be loaded"
+    assert isinstance(
+        config, MultiCollectionConfig
+    ), "Should be MultiCollectionConfig instance"
+    assert len(config.collections) > 0, "Should have at least one collection"
 
-        # Test validation
-        errors = validate_multi_config(config)
-        if errors:
-            print(f"  ⚠ Validation errors: {errors}")
-        else:
-            print(f"  ✓ Configuration is valid")
+    # Test individual collections
+    for coll_id, collection in config.collections.items():
+        print(f"  Collection '{coll_id}':")
+        print(f"    Name: {collection.name}")
+        print(f"    Domain: {collection.domain}")
+        print(f"    Tags: {collection.tags}")
+        print(f"    Base URLs: {collection.sources.base_urls[:2]}...")  # First 2 URLs
 
-    except Exception as e:
-        print(f"✗ Failed to load multi-collection config: {e}")
-        return False
+        # Assert collection properties
+        assert isinstance(
+            collection, CollectionConfig
+        ), f"Collection {coll_id} should be CollectionConfig"
+        assert collection.name, f"Collection {coll_id} should have a name"
+        assert (
+            len(collection.sources.base_urls) > 0
+        ), f"Collection {coll_id} should have base URLs"
+
+    # Test validation
+    errors = validate_multi_config(config)
+    if errors:
+        print(f"  ⚠ Validation errors: {errors}")
+    else:
+        print(f"  ✓ Configuration is valid")
+
+    assert (
+        len(errors) == 0
+    ), f"Configuration should be valid, but found errors: {errors}"
 
     return True
 
@@ -63,22 +76,21 @@ def test_multi_config_validation():
     """Test validation of multi-collection configurations."""
     print("\n=== Testing Multi-Collection Config Validation ===")
 
-    try:
-        # Test loading the new multi-collection example
-        config = load_multi_config("ingest/multi-collection.example.yml")
+    # Test loading the new multi-collection example
+    config = load_multi_config("ingest/multi-collection.example.yml")
 
-        # Test validation
-        errors = validate_multi_config(config)
-        if errors:
-            print(f"  ⚠ Validation errors: {errors}")
-            return False
-        else:
-            print(f"  ✓ Multi-collection configuration is valid")
-            return True
+    # Test validation
+    errors = validate_multi_config(config)
+    if errors:
+        print(f"  ⚠ Validation errors: {errors}")
+    else:
+        print(f"  ✓ Multi-collection configuration is valid")
 
-    except Exception as e:
-        print(f"✗ Failed to validate multi-collection config: {e}")
-        return False
+    assert (
+        len(errors) == 0
+    ), f"Multi-collection configuration should be valid, but found errors: {errors}"
+
+    return True
 
 
 def test_error_handling():
@@ -115,26 +127,24 @@ def test_error_handling():
         },
     ]
 
-    all_passed = True
-
     # Test file loading errors
     for test_case in test_cases:
+        exception_raised = False
         try:
             load_config(test_case["config_path"])
-            if test_case["should_fail"]:
-                print(f"✗ {test_case['name']}: Expected failure but succeeded")
-                all_passed = False
-            else:
-                print(f"✓ {test_case['name']}: Succeeded as expected")
         except ConfigurationError:
-            if test_case["should_fail"]:
-                print(f"✓ {test_case['name']}: Failed as expected (ConfigurationError)")
-            else:
-                print(f"✗ {test_case['name']}: Unexpected failure")
-                all_passed = False
+            exception_raised = True
+            print(f"✓ {test_case['name']}: Failed as expected (ConfigurationError)")
         except Exception as e:
-            print(f"✗ {test_case['name']}: Unexpected error type: {e}")
-            all_passed = False
+            exception_raised = True
+            print(f"✓ {test_case['name']}: Failed with exception: {type(e).__name__}")
+
+        if test_case["should_fail"]:
+            assert (
+                exception_raised
+            ), f"{test_case['name']}: Expected failure but succeeded"
+        else:
+            assert not exception_raised, f"{test_case['name']}: Unexpected failure"
 
     # Test validation errors
     for invalid_config in invalid_configs:
@@ -150,14 +160,17 @@ def test_error_handling():
                 print(
                     f"✗ {invalid_config['name']}: Validation should have found errors"
                 )
-                all_passed = False
+                assert (
+                    False
+                ), f"{invalid_config['name']}: Validation should have found errors but didn't"
 
         except Exception as e:
             print(
                 f"✓ {invalid_config['name']}: Exception raised as expected: {type(e).__name__}"
             )
+            # Exception is expected for invalid configs, so this is okay
 
-    return all_passed
+    return True
 
 
 def main():
@@ -176,7 +189,9 @@ def main():
 
     for test in tests:
         try:
-            if test():
+            result = test()
+            # Test functions return True or None on success
+            if result is not False:
                 passed += 1
             else:
                 print(f"✗ Test {test.__name__} failed")

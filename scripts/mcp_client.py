@@ -10,6 +10,7 @@ Features:
 - Execute any tool with arguments
 - Access any resource by URI
 - Interactive and non-interactive modes
+- Full support for web-rag multi-collection server
 
 Usage:
     # List all available servers
@@ -21,8 +22,20 @@ Usage:
     # List resources for a server
     python scripts/mcp_client.py list-resources web-rag
 
-    # Execute a tool
-    python scripts/mcp_client.py exec web-rag search --query "jj rebase"
+    # Execute a tool - Search across collections
+    python scripts/mcp_client.py exec web-rag search --query "jj rebase" --k 5
+
+    # Search a specific collection
+    python scripts/mcp_client.py exec web-rag search --query "docker compose" --collection_id "docker_collection"
+
+    # List all collections
+    python scripts/mcp_client.py exec web-rag list_collections
+
+    # Select best collection for a query
+    python scripts/mcp_client.py exec web-rag select_collection --query "how to use git"
+
+    # Get collection info
+    python scripts/mcp_client.py exec web-rag get_collection_info --collection_id "jj_vcs"
 
     # Access a resource
     python scripts/mcp_client.py get-resource web-rag "web-rag://chunk/123"
@@ -95,6 +108,9 @@ class MCPClient:
     def _find_config_file(self) -> Optional[str]:
         """Find MCP configuration file in standard locations."""
         possible_paths = [
+            Path(
+                "/Users/cezary/Library/Application Support/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/settings/mcp_settings.json"
+            ),
             Path.home() / ".mcp.json",
             Path.cwd() / ".mcp.json",
             Path.cwd() / "mcp.json",
@@ -142,17 +158,52 @@ class MCPClient:
 
             # Check if we're in the ragger project with web-rag server
             if Path("rag_mcp/server.py").exists():
+                # Detect the project root and virtual environment
+                project_root = Path.cwd()
+                venv_python = None
+
+                # Check for poetry environment
+                if Path("pyproject.toml").exists():
+                    # Try to get poetry python path
+                    try:
+                        result = subprocess.run(
+                            ["poetry", "env", "info", "--path"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                        )
+                        if result.returncode == 0:
+                            venv_path = Path(result.stdout.strip())
+                            venv_python = venv_path / "bin" / "python"
+                    except:
+                        pass
+
+                # Fallback to .venv if poetry command fails
+                if not venv_python or not venv_python.exists():
+                    venv_python = project_root / ".venv" / "bin" / "python"
+
+                # Use system python as last resort
+                if not venv_python.exists():
+                    venv_python = Path(sys.executable)
+
                 servers["web-rag"] = MCPServerConfig(
                     name="web-rag",
                     command="sh",
                     args=[
                         "-c",
-                        "cd /Users/cezary/ragger && /Users/cezary/ragger/.venv/bin/python -m rag_mcp.server",
+                        f"cd {project_root} && {venv_python} -m rag_mcp.server",
                     ],
-                    env={"OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", "")},
-                    cwd=str(Path.cwd()),
+                    env={
+                        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY", ""),
+                        "MULTI_COLLECTION_CONFIG_PATH": os.getenv(
+                            "MULTI_COLLECTION_CONFIG_PATH",
+                            "ingest/multi-collection.yml",
+                        ),
+                    },
+                    cwd=str(project_root),
                 )
-                print(f"Detected local web-rag server")
+                print(f"✅ Detected local web-rag server at {project_root}")
+                print(f"   Using Python: {venv_python}")
 
             return servers
 
@@ -377,6 +428,16 @@ async def interactive_mode(client: MCPClient):
     print("  quit/exit        - Exit interactive mode")
     print("=" * 50)
 
+    # Print web-rag specific examples if available
+    if "web-rag" in client.list_servers():
+        print("\n📚 Web-RAG Multi-Collection Examples:")
+        print("  exec web-rag list_collections")
+        print('  exec web-rag search --query "your query" --k 5')
+        print('  exec web-rag search --query "@docker compose up" --k 3')
+        print('  exec web-rag select_collection --query "how to use git"')
+        print('  exec web-rag get_collection_info --collection_id "jj_vcs"')
+        print("=" * 50)
+
     while True:
         try:
             command = input("\nmcp> ").strip()
@@ -400,6 +461,11 @@ async def interactive_mode(client: MCPClient):
                 print("  get <server> <uri> - Get a resource")
                 print("  quit/exit        - Exit interactive mode")
 
+                if "web-rag" in client.list_servers():
+                    print("\n📚 Web-RAG Examples:")
+                    print("  exec web-rag list_collections")
+                    print('  exec web-rag search --query "docker" --k 5')
+
             elif cmd == "servers":
                 servers = client.list_servers()
                 if servers:
@@ -418,10 +484,16 @@ async def interactive_mode(client: MCPClient):
                         print(f"\n  • {tool['name']}")
                         if tool["description"]:
                             print(f"    {tool['description']}")
-                        if tool.get("input_schema"):
-                            print(
-                                f"    Schema: {json.dumps(tool['input_schema'], indent=6)}"
-                            )
+                        if tool.get("input_schema", {}).get("properties"):
+                            print(f"    Parameters:")
+                            props = tool["input_schema"]["properties"]
+                            for param, details in props.items():
+                                required = param in tool["input_schema"].get(
+                                    "required", []
+                                )
+                                req_text = " (required)" if required else " (optional)"
+                                desc = details.get("description", "")
+                                print(f"      --{param}{req_text}: {desc}")
                 else:
                     print(f"No tools found for '{server_name}'")
 
@@ -455,7 +527,12 @@ async def interactive_mode(client: MCPClient):
                         # Handle different content types
                         for content_item in result.content:
                             if hasattr(content_item, "text"):
-                                print(content_item.text)
+                                # Try to parse as JSON for pretty printing
+                                try:
+                                    data = json.loads(content_item.text)
+                                    print(json.dumps(data, indent=2))
+                                except:
+                                    print(content_item.text)
                             else:
                                 print(json.dumps(content_item, default=str, indent=2))
                     else:
@@ -502,9 +579,30 @@ async def main():
 Examples:
   %(prog)s list-servers
   %(prog)s list-tools web-rag
-  %(prog)s list-resources web-rag  
+  %(prog)s list-resources web-rag
+  
+  # Search across all collections (auto-select best)
   %(prog)s exec web-rag search --query "jj rebase" --k 5
+  
+  # Search with @ prefix for collection hint
+  %(prog)s exec web-rag search --query "@docker compose up" --k 3
+  
+  # Search specific collection by ID
+  %(prog)s exec web-rag search --query "git commands" --collection_id "jj_vcs"
+  
+  # List all available collections
+  %(prog)s exec web-rag list_collections
+  
+  # Analyze which collection best matches a query  
+  %(prog)s exec web-rag select_collection --query "how to use kubernetes"
+  
+  # Get detailed information about a collection
+  %(prog)s exec web-rag get_collection_info --collection_id "docker_collection"
+  
+  # Access a specific chunk resource
   %(prog)s get-resource web-rag "web-rag://chunk/123"
+  
+  # Interactive mode
   %(prog)s interactive
         """,
     )
@@ -533,7 +631,7 @@ Examples:
     exec_parser.add_argument("server", help="Server name")
     exec_parser.add_argument("tool", help="Tool name")
     exec_parser.add_argument(
-        "args", nargs="*", help="Tool arguments (--key value format)"
+        "args", nargs=argparse.REMAINDER, help="Tool arguments (--key value format)"
     )
 
     # Get resource command
@@ -574,9 +672,15 @@ Examples:
                     desc_lines = tool["description"].split("\n")
                     for line in desc_lines:
                         print(f"  {line}")
-                if tool.get("input_schema"):
-                    print(f"  Input schema:")
-                    print(f"    {json.dumps(tool['input_schema'], indent=4)}")
+                if tool.get("input_schema", {}).get("properties"):
+                    print(f"  Parameters:")
+                    props = tool["input_schema"]["properties"]
+                    required = tool["input_schema"].get("required", [])
+                    for param, details in props.items():
+                        req_text = " (required)" if param in required else " (optional)"
+                        desc = details.get("description", "")
+                        param_type = details.get("type", "string")
+                        print(f"    --{param}{req_text}: {desc} [{param_type}]")
         else:
             print(f"No tools found for '{args.server}'")
 
@@ -605,7 +709,12 @@ Examples:
             if hasattr(result, "content"):
                 for content_item in result.content:
                     if hasattr(content_item, "text"):
-                        print(content_item.text)
+                        # Try to parse as JSON for pretty printing
+                        try:
+                            data = json.loads(content_item.text)
+                            print(json.dumps(data, indent=2))
+                        except:
+                            print(content_item.text)
                     else:
                         print(json.dumps(content_item, default=str, indent=2))
             else:

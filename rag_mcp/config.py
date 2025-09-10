@@ -3,16 +3,22 @@
 This module provides configuration classes and loading functions that support
 both single-collection (legacy) and multi-collection configurations while
 maintaining backwards compatibility.
+
+Now integrated with the hierarchical configuration manager for clear precedence
+between CLI arguments, environment variables, file settings, and defaults.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -314,11 +320,15 @@ class ConfigurationError(Exception):
     pass
 
 
-def load_config(config_path: str) -> MultiCollectionConfig:
-    """Load multi-collection configuration from file.
+def load_config(
+    config_path: str, cli_args: dict = None, use_hierarchy: bool = True
+) -> MultiCollectionConfig:
+    """Load multi-collection configuration from file with hierarchical support.
 
     Args:
         config_path: Path to configuration file
+        cli_args: Optional CLI arguments to override configuration
+        use_hierarchy: Whether to use the hierarchical configuration system
 
     Returns:
         MultiCollectionConfig instance
@@ -326,27 +336,49 @@ def load_config(config_path: str) -> MultiCollectionConfig:
     Raises:
         ConfigurationError: If configuration is invalid or file not found
     """
-    if not os.path.exists(config_path):
-        raise ConfigurationError(f"Configuration file not found: {config_path}")
-
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-
-        if not isinstance(data, dict):
-            raise ConfigurationError(
-                f"Configuration file must contain a dictionary, got {type(data)}"
+    if use_hierarchy:
+        # Use the new hierarchical configuration system
+        try:
+            # Load configuration through the ConfigManager
+            config_data = load_hierarchical_config(
+                cli_args=cli_args,
+                config_file=config_path,
+                debug=os.environ.get("CONFIG_DEBUG", "").lower() == "true",
             )
 
-        return MultiCollectionConfig.from_dict(data)
+            # Convert to MultiCollectionConfig
+            return MultiCollectionConfig.from_dict(config_data)
 
-    except yaml.YAMLError as e:
-        raise ConfigurationError(f"Failed to parse YAML configuration: {e}")
-    except Exception as e:
-        raise ConfigurationError(f"Failed to load configuration: {e}")
+        except Exception as e:
+            logger.warning(
+                f"Hierarchical config failed, falling back to direct load: {e}"
+            )
+            # Fall back to direct loading if hierarchical fails
+            use_hierarchy = False
+
+    if not use_hierarchy:
+        # Original implementation for backward compatibility
+        if not os.path.exists(config_path):
+            raise ConfigurationError(f"Configuration file not found: {config_path}")
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+
+            if not isinstance(data, dict):
+                raise ConfigurationError(
+                    f"Configuration file must contain a dictionary, got {type(data)}"
+                )
+
+            return MultiCollectionConfig.from_dict(data)
+
+        except yaml.YAMLError as e:
+            raise ConfigurationError(f"Failed to parse YAML configuration: {e}")
+        except Exception as e:
+            raise ConfigurationError(f"Failed to load configuration: {e}")
 
 
-def load_multi_config(config_path: str) -> MultiCollectionConfig:
+def load_multi_config(config_path: str, cli_args: dict = None) -> MultiCollectionConfig:
     """Load multi-collection configuration from file.
 
     This function is now identical to load_config() since we only support
@@ -354,6 +386,7 @@ def load_multi_config(config_path: str) -> MultiCollectionConfig:
 
     Args:
         config_path: Path to configuration file
+        cli_args: Optional CLI arguments to override configuration
 
     Returns:
         MultiCollectionConfig instance
@@ -361,7 +394,7 @@ def load_multi_config(config_path: str) -> MultiCollectionConfig:
     Raises:
         ConfigurationError: If configuration is invalid or file not found
     """
-    return load_config(config_path)
+    return load_config(config_path, cli_args=cli_args)
 
 
 def validate_collection_config(config: CollectionConfig) -> List[str]:

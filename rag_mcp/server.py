@@ -593,6 +593,7 @@ def get_collection_info(
         "description": config.description,
         "domain": config.domain,
         "tags": config.tags,
+        "document_count": collection.get_document_count(),
         "configuration": {
             "chunk_chars": config.chunk_chars,
             "chunk_overlap": config.chunk_overlap,
